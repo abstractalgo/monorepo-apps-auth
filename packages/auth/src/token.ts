@@ -8,8 +8,13 @@ export interface GoogleUser {
 }
 
 /**
- * Decode a JWT without verification (the token was issued by Google
- * and validated client-side by the GSI library — we just read claims).
+ * Decode JWT payload to read claims.
+ *
+ * NOTE: This does NOT verify the signature. Cryptographic verification
+ * happens server-side in the auth gateway's /api/verify endpoint using
+ * google-auth-library. By the time the token reaches a consuming app,
+ * it has already been verified. This function only reads claims for
+ * display and checks expiry.
  */
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const base64Url = token.split(".")[1];
@@ -23,10 +28,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(json);
 }
 
-export function validateToken(
-  token: string,
-  allowedDomain: string
-): GoogleUser | null {
+export function parseToken(token: string): GoogleUser | null {
   try {
     const payload = decodeJwtPayload(token);
 
@@ -36,17 +38,11 @@ export function validateToken(
       return null;
     }
 
-    // Check hosted domain
-    const hd = payload.hd as string | undefined;
-    if (allowedDomain && hd !== allowedDomain) {
-      return null;
-    }
-
     return {
       email: payload.email as string,
       name: payload.name as string,
       picture: payload.picture as string,
-      hd,
+      hd: payload.hd as string | undefined,
     };
   } catch {
     return null;

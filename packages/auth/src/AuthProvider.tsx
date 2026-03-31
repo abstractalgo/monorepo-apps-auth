@@ -6,7 +6,7 @@ import {
   extractTokenFromHash,
   getToken,
   saveToken,
-  validateToken,
+  parseToken,
 } from "./token";
 
 export interface AuthContextValue {
@@ -26,10 +26,9 @@ export const AuthContext = createContext<AuthContextValue>({
 interface AuthProviderProps {
   children: ReactNode;
   gatewayUrl: string;
-  allowedDomain: string;
 }
 
-export function AuthProvider({ children, gatewayUrl, allowedDomain }: AuthProviderProps) {
+export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,7 +44,7 @@ export function AuthProvider({ children, gatewayUrl, allowedDomain }: AuthProvid
     // Check for token in URL hash (returning from auth gateway)
     const hashToken = extractTokenFromHash();
     if (hashToken) {
-      const validUser = validateToken(hashToken, allowedDomain);
+      const validUser = parseToken(hashToken);
       if (validUser) {
         saveToken(hashToken);
         setUser(validUser);
@@ -57,7 +56,7 @@ export function AuthProvider({ children, gatewayUrl, allowedDomain }: AuthProvid
     // Check for existing token in localStorage
     const storedToken = getToken();
     if (storedToken) {
-      const validUser = validateToken(storedToken, allowedDomain);
+      const validUser = parseToken(storedToken);
       if (validUser) {
         setUser(validUser);
         setIsLoading(false);
@@ -70,7 +69,7 @@ export function AuthProvider({ children, gatewayUrl, allowedDomain }: AuthProvid
     // No valid token — redirect to auth gateway
     const redirect = encodeURIComponent(window.location.origin);
     window.location.href = `${gatewayUrl}?redirect=${redirect}`;
-  }, [gatewayUrl, allowedDomain]);
+  }, [gatewayUrl]);
 
   const value = useMemo(
     () => ({ user, isAuthenticated: !!user, isLoading, logout }),

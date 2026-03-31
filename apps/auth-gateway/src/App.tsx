@@ -31,53 +31,52 @@ function getRedirectUrl(): string | null {
   return params.get("redirect");
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> {
-  const base64Url = token.split(".")[1];
-  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-  const json = decodeURIComponent(
-    atob(base64)
-      .split("")
-      .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-      .join("")
-  );
-  return JSON.parse(json);
-}
-
 export function App() {
   const buttonRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const redirectUrl = getRedirectUrl();
-  const allowedDomain = import.meta.env.VITE_ALLOWED_DOMAIN || "";
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   const handleCredentialResponse = useCallback(
-    (response: { credential: string }) => {
-      const token = response.credential;
+    async (response: { credential: string }) => {
+      if (!redirectUrl || !isAllowedRedirect(redirectUrl)) {
+        setError("No valid redirect URL provided.");
+        return;
+      }
 
-      // Validate hosted domain
-      if (allowedDomain) {
-        try {
-          const payload = decodeJwtPayload(token);
-          if (payload.hd !== allowedDomain) {
-            setError(
-              `Access restricted to ${allowedDomain} accounts. You signed in with a ${payload.hd || "personal"} account.`
-            );
+      setVerifying(true);
+
+      try {
+        const res = await fetch("/api/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            credential: response.credential,
+            redirect: redirectUrl,
+          }),
+          redirect: "manual",
+        });
+
+        if (res.type === "opaqueredirect" || res.status === 302) {
+          // The serverless function returns a redirect — follow it
+          const location = res.headers.get("Location");
+          if (location) {
+            window.location.href = location;
             return;
           }
-        } catch {
-          setError("Failed to validate token.");
-          return;
         }
-      }
 
-      // Redirect back with token
-      if (redirectUrl && isAllowedRedirect(redirectUrl)) {
-        window.location.href = `${redirectUrl}#token=${encodeURIComponent(token)}`;
-      } else {
-        setError("No valid redirect URL provided.");
+        // If we got a JSON error response
+        const data = await res.json();
+        setError(data.error || "Verification failed");
+      } catch {
+        setError("Failed to verify token. Please try again.");
+      } finally {
+        setVerifying(false);
       }
     },
-    [redirectUrl, allowedDomain]
+    [redirectUrl]
   );
 
   useEffect(() => {
@@ -126,6 +125,8 @@ export function App() {
     }
   }, [clientId, redirectUrl, handleCredentialResponse]);
 
+  const allowedDomain = import.meta.env.VITE_ALLOWED_DOMAIN || "";
+
   return (
     <div
       style={{
@@ -146,6 +147,8 @@ export function App() {
       )}
       {error ? (
         <p style={{ color: "#dc2626", maxWidth: 400, textAlign: "center" }}>{error}</p>
+      ) : verifying ? (
+        <p style={{ color: "#666" }}>Verifying...</p>
       ) : (
         <div ref={buttonRef} />
       )}
