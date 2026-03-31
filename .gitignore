@@ -1,0 +1,17 @@
+node_modules
+dist
+.turbo
+*.tsbuildinfo
+*.local
+.env
+.env.*
+!.env.example
+
+# Yarn Berry
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*

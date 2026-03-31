@@ -1,0 +1,12 @@
+{
+  "name": "monorepo-apps-auth",
+  "private": true,
+  "packageManager": "yarn@4.13.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.9.1"
+  }
+}
