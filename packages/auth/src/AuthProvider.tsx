@@ -6,7 +6,6 @@ import {
   extractTokenFromHash,
   getToken,
   saveToken,
-  parseToken,
 } from "./token";
 
 export interface AuthContextValue {
@@ -28,6 +27,29 @@ interface AuthProviderProps {
   gatewayUrl: string;
 }
 
+async function verifyTokenServerSide(
+  gatewayUrl: string,
+  credential: string
+): Promise<GoogleUser | null> {
+  try {
+    const res = await fetch(`${gatewayUrl}/api/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function redirectToLogin(gatewayUrl: string) {
+  const redirect = encodeURIComponent(window.location.origin);
+  window.location.href = `${gatewayUrl}?redirect=${redirect}`;
+}
+
 export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,40 +57,48 @@ export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
-    // Redirect to gateway for fresh login
-    const redirect = encodeURIComponent(window.location.origin);
-    window.location.href = `${gatewayUrl}?redirect=${redirect}`;
+    redirectToLogin(gatewayUrl);
   }, [gatewayUrl]);
 
   useEffect(() => {
-    // Check for token in URL hash (returning from auth gateway)
-    const hashToken = extractTokenFromHash();
-    if (hashToken) {
-      const validUser = parseToken(hashToken);
-      if (validUser) {
-        saveToken(hashToken);
-        setUser(validUser);
-        setIsLoading(false);
-        return;
+    let cancelled = false;
+
+    async function authenticate() {
+      // Check for token in URL hash (returning from auth gateway)
+      const hashToken = extractTokenFromHash();
+      if (hashToken) {
+        const verifiedUser = await verifyTokenServerSide(gatewayUrl, hashToken);
+        if (cancelled) return;
+        if (verifiedUser) {
+          saveToken(hashToken);
+          setUser(verifiedUser);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Check for existing token in localStorage
+      const storedToken = getToken();
+      if (storedToken) {
+        const verifiedUser = await verifyTokenServerSide(gatewayUrl, storedToken);
+        if (cancelled) return;
+        if (verifiedUser) {
+          setUser(verifiedUser);
+          setIsLoading(false);
+          return;
+        }
+        // Token is expired or invalid
+        clearToken();
+      }
+
+      // No valid token — redirect to auth gateway
+      if (!cancelled) {
+        redirectToLogin(gatewayUrl);
       }
     }
 
-    // Check for existing token in localStorage
-    const storedToken = getToken();
-    if (storedToken) {
-      const validUser = parseToken(storedToken);
-      if (validUser) {
-        setUser(validUser);
-        setIsLoading(false);
-        return;
-      }
-      // Token is expired or invalid
-      clearToken();
-    }
-
-    // No valid token — redirect to auth gateway
-    const redirect = encodeURIComponent(window.location.origin);
-    window.location.href = `${gatewayUrl}?redirect=${redirect}`;
+    authenticate();
+    return () => { cancelled = true; };
   }, [gatewayUrl]);
 
   const value = useMemo(

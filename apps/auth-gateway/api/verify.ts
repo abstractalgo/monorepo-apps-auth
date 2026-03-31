@@ -4,14 +4,23 @@ import { OAuth2Client } from "google-auth-library";
 const client = new OAuth2Client();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS — allow consuming apps to call this endpoint
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   const { credential, redirect } = req.body;
 
-  if (!credential || !redirect) {
-    return res.status(400).json({ error: "Missing credential or redirect" });
+  if (!credential) {
+    return res.status(400).json({ error: "Missing credential" });
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -39,10 +48,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Return the redirect URL with the verified token
-    const redirectUrl = new URL(redirect);
-    redirectUrl.hash = `token=${encodeURIComponent(credential)}`;
-    return res.status(200).json({ redirectUrl: redirectUrl.toString() });
+    const user = {
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      hd: payload.hd,
+    };
+
+    // If redirect is provided, return redirect URL (login flow from gateway)
+    // Otherwise, return user info (token verification from consuming apps)
+    if (redirect) {
+      const redirectUrl = new URL(redirect);
+      redirectUrl.hash = `token=${encodeURIComponent(credential)}`;
+      return res.status(200).json({ redirectUrl: redirectUrl.toString(), user });
+    }
+
+    return res.status(200).json({ user });
   } catch (err) {
     return res.status(401).json({ error: "Token verification failed" });
   }
