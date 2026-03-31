@@ -73,7 +73,7 @@ __metadata:
   dependencies:
     "@types/react": "npm:^19.2.14"
     react: "npm:^19.2.4"
-    typescript: "npm:^6.0.0"
+    typescript: "npm:^6.0.2"
   peerDependencies:
     react: ^19.2.3
     react-dom: ^19.2.3
