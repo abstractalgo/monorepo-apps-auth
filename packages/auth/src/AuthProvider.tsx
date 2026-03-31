@@ -25,17 +25,19 @@ export const AuthContext = createContext<AuthContextValue>({
 interface AuthProviderProps {
   children: ReactNode;
   gatewayUrl: string;
+  requiredGroups?: string[];
 }
 
 async function verifyTokenServerSide(
   gatewayUrl: string,
-  credential: string
+  credential: string,
+  requiredGroups?: string[]
 ): Promise<GoogleUser | null> {
   try {
     const res = await fetch(`${gatewayUrl}/api/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify({ credential, requiredGroups }),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -50,7 +52,7 @@ function redirectToLogin(gatewayUrl: string) {
   window.location.href = `${gatewayUrl}?redirect=${redirect}`;
 }
 
-export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
+export function AuthProvider({ children, gatewayUrl, requiredGroups }: AuthProviderProps) {
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -67,7 +69,7 @@ export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
       // Check for token in URL hash (returning from auth gateway)
       const hashToken = extractTokenFromHash();
       if (hashToken) {
-        const verifiedUser = await verifyTokenServerSide(gatewayUrl, hashToken);
+        const verifiedUser = await verifyTokenServerSide(gatewayUrl, hashToken, requiredGroups);
         if (cancelled) return;
         if (verifiedUser) {
           saveToken(hashToken);
@@ -80,7 +82,7 @@ export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
       // Check for existing token in localStorage
       const storedToken = getToken();
       if (storedToken) {
-        const verifiedUser = await verifyTokenServerSide(gatewayUrl, storedToken);
+        const verifiedUser = await verifyTokenServerSide(gatewayUrl, storedToken, requiredGroups);
         if (cancelled) return;
         if (verifiedUser) {
           setUser(verifiedUser);
@@ -99,7 +101,7 @@ export function AuthProvider({ children, gatewayUrl }: AuthProviderProps) {
 
     authenticate();
     return () => { cancelled = true; };
-  }, [gatewayUrl]);
+  }, [gatewayUrl, requiredGroups]);
 
   const value = useMemo(
     () => ({ user, isAuthenticated: !!user, isLoading, logout }),

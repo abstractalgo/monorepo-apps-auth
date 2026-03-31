@@ -5,6 +5,7 @@ export interface GoogleUser {
   name: string;
   picture: string;
   hd?: string; // hosted domain
+  groups?: string[]; // Google Groups the user belongs to
 }
 
 /**

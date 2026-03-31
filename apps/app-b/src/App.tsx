@@ -2,6 +2,9 @@ import { AuthProvider, RequireAuth, useAuth } from "@monorepo/auth";
 import { greet, formatDate } from "@monorepo/shared";
 
 const gatewayUrl = import.meta.env.VITE_AUTH_GATEWAY_URL || "http://localhost:3000";
+const requiredGroups = import.meta.env.VITE_REQUIRED_GROUPS
+  ? import.meta.env.VITE_REQUIRED_GROUPS.split(",").map((g: string) => g.trim())
+  : undefined;
 
 function Home() {
   const { user, logout } = useAuth();
@@ -49,7 +52,7 @@ function Home() {
 
 export function App() {
   return (
-    <AuthProvider gatewayUrl={gatewayUrl}>
+    <AuthProvider gatewayUrl={gatewayUrl} requiredGroups={requiredGroups}>
       <RequireAuth>
         <Home />
       </RequireAuth>

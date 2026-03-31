@@ -1,7 +1,33 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { OAuth2Client } from "google-auth-library";
+import { google } from "googleapis";
 
-const client = new OAuth2Client();
+const oauthClient = new OAuth2Client();
+
+async function getDirectoryService() {
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || "{}");
+  const adminEmail = process.env.GOOGLE_ADMIN_EMAIL || "";
+
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/admin.directory.group.readonly"],
+    clientOptions: {
+      subject: adminEmail, // impersonate a Workspace admin
+    },
+  });
+
+  return google.admin({ version: "directory_v1", auth });
+}
+
+async function getUserGroups(userEmail: string): Promise<string[]> {
+  try {
+    const service = await getDirectoryService();
+    const res = await service.groups.list({ userKey: userEmail });
+    return (res.data.groups || []).map((g) => g.email!);
+  } catch {
+    return [];
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS — allow consuming apps to call this endpoint
@@ -17,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { credential, redirect } = req.body;
+  const { credential, redirect, requiredGroups } = req.body;
 
   if (!credential) {
     return res.status(400).json({ error: "Missing credential" });
@@ -31,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const ticket = await client.verifyIdToken({
+    const ticket = await oauthClient.verifyIdToken({
       idToken: credential,
       audience: clientId,
     });
@@ -48,11 +74,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // Check Google Groups membership if required
+    const groups: string[] = requiredGroups || [];
+    let userGroups: string[] = [];
+
+    if (groups.length > 0) {
+      userGroups = await getUserGroups(payload.email!);
+      const isMember = groups.some((g: string) => userGroups.includes(g));
+      if (!isMember) {
+        return res.status(403).json({
+          error: `Access requires membership in one of: ${groups.join(", ")}`,
+          userGroups,
+        });
+      }
+    }
+
     const user = {
       email: payload.email,
       name: payload.name,
       picture: payload.picture,
       hd: payload.hd,
+      groups: userGroups,
     };
 
     // If redirect is provided, return redirect URL (login flow from gateway)
