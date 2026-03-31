@@ -39,10 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Redirect back to the app with the verified token
+    // Return the redirect URL with the verified token
     const redirectUrl = new URL(redirect);
     redirectUrl.hash = `token=${encodeURIComponent(credential)}`;
-    return res.redirect(302, redirectUrl.toString());
+    return res.status(200).json({ redirectUrl: redirectUrl.toString() });
   } catch (err) {
     return res.status(401).json({ error: "Token verification failed" });
   }

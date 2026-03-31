@@ -55,20 +55,15 @@ export function App() {
             credential: response.credential,
             redirect: redirectUrl,
           }),
-          redirect: "manual",
         });
 
-        if (res.type === "opaqueredirect" || res.status === 302) {
-          // The serverless function returns a redirect — follow it
-          const location = res.headers.get("Location");
-          if (location) {
-            window.location.href = location;
-            return;
-          }
+        const data = await res.json();
+
+        if (res.ok && data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
         }
 
-        // If we got a JSON error response
-        const data = await res.json();
         setError(data.error || "Verification failed");
       } catch {
         setError("Failed to verify token. Please try again.");
